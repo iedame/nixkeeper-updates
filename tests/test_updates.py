@@ -58,10 +58,23 @@ def run(started, finished=True):
 class ToRead(unittest.TestCase):
     def test_new_changed_and_older_rules_newest_first(self):
         found = {
-            "same": {"attempt": {"started": NOW - DAY, "parser": PARSER}},
+            "same": {
+                "attempt": {
+                    "started": NOW - DAY,
+                    "parser": PARSER,
+                    "date": "2026-10-04",
+                }
+            },
             "newer": {"attempt": {"started": NOW - 2 * DAY, "parser": PARSER}},
             "rules": {"attempt": {"started": NOW - DAY, "parser": PARSER - 1}},
             "nolog": {"noLog": NOW - DAY},
+            "olderlog": {
+                "attempt": {
+                    "started": NOW - DAY,
+                    "parser": PARSER,
+                    "date": "2026-04-06",
+                }
+            },
         }
         latest = {
             "same": run(NOW - DAY),
@@ -70,8 +83,11 @@ class ToRead(unittest.TestCase):
             "new": run(NOW - 3 * DAY),
             "running": run(NOW, finished=False),
             "nolog": run(NOW - DAY),
+            "olderlog": run(NOW - DAY),
         }
-        self.assertEqual(cli.to_read(found, latest), ["newer", "rules", "new"])
+        self.assertEqual(
+            cli.to_read(found, latest), ["newer", "olderlog", "rules", "new"]
+        )
 
     def test_entries_say_whats_pending(self):
         attempt = {"started": NOW - DAY, "parser": PARSER}
@@ -117,6 +133,12 @@ class ReadAttempt(unittest.TestCase):
             (attempt["date"], attempt["outcome"]), ("2026-10-06", "prOpened")
         )
         self.assertEqual(attempt["pr"], 123456)
+
+    def test_not_an_older_attempts_log(self):
+        listing = b'<a href="2026-04-06.log">x</a>'
+        answers = {f"{site.SITE}/old/": listing}
+        with mock.patch.object(site, "get", side_effect=answers.get):
+            self.assertIsNone(cli.read_attempt("old", NOW))
 
     def test_none_without_a_log(self):
         with mock.patch.object(site, "get", return_value=None):
