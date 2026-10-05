@@ -1,0 +1,46 @@
+name: "Digest: nixpkgs-update's attempts"
+
+# Keeps the digest (the data branch: data/attempts.jsonl.gz and
+# data/meta.json) up to date with nixpkgs-update, every 3 hours: the bot's
+# state database (about 14 MB) and the logs of its attempts since the last
+# run (about 300, one request a second), read with nixkeeper's own rules
+# (nixkeeper_updates/cli.py). The first runs read every package's latest log
+# (about 34,000), a few thousand a run. The data branch is main plus one
+# commit with the digest (scripts/data-branch.sh).
+
+on:
+  schedule:
+    - cron: '23 */3 * * *'   # every 3 hours, at 23 past
+  workflow_dispatch: {}
+
+# One run at a time: a run waits for the last instead of cancelling it.
+concurrency:
+  group: data-branch
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # publishes the data branch
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Restore the last published digest, on main
+        run: bash scripts/data-branch.sh restore
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+
+      # With nixkeeper's source beside it (flake.nix): its rules for logs.
+      - name: Bring the digest up to date
+        run: nix run . -- data
+
+      - name: Publish the digest if it changed
+        run: |
+          bash scripts/data-branch.sh publish "digest: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
