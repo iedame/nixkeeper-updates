@@ -57,7 +57,12 @@ def to_read(found, latest):
         if run["finished"] is None or entry.get("noLog") == run["started"]:
             continue  # still running, or nothing to read
         attempt = entry.get("attempt") or {}
-        if attempt.get("started") != run["started"] or attempt.get("parser") != PARSER:
+        if (
+            attempt.get("started") != run["started"]
+            or attempt.get("parser") != PARSER
+            # From before read_attempt took only logs from its day on.
+            or attempt.get("date", "") < site.day(run["started"])
+        ):
             wanted.append((-run["started"], attr))
     return [attr for _, attr in sorted(wanted)]
 
@@ -65,12 +70,17 @@ def to_read(found, latest):
 def read_attempt(attr, started):
     """The attempt that started at started (unix time), read: its log, named
     after its day; if that isn't there (an attempt over midnight, say), the
-    newest log in the package's folder. None if there's no log."""
+    newest log in the package's folder from that day on (an older one is an
+    earlier attempt's). None if there's no log."""
     on_day = site.day(started)
     body = site.get(site.log_url(attr, on_day))
     if body is None:
         listing = site.get(f"{site.SITE}/{urllib.parse.quote(attr)}/")
-        days = LOG_NAME.findall((listing or b"").decode(errors="replace"))
+        days = [
+            d
+            for d in LOG_NAME.findall((listing or b"").decode(errors="replace"))
+            if d >= on_day
+        ]
         if not days:
             return None
         on_day = max(days)
