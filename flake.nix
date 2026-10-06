@@ -82,11 +82,19 @@
         };
 
         checks = {
-          tests = pkgs.runCommand "nixkeeper-updates-tests" { nativeBuildInputs = [ python ]; } ''
-            cd ${src}
-            PYTHONPATH=${pythonPath} python3 -m unittest discover -s tests -t . -v
-            touch $out
-          '';
+          tests =
+            pkgs.runCommand "nixkeeper-updates-tests"
+              {
+                nativeBuildInputs = [ python ];
+                # The deadline tests run a server on 127.0.0.1, which macOS's
+                # sandbox blocks unless asked.
+                __darwinAllowLocalNetworking = true;
+              }
+              ''
+                cd ${src}
+                PYTHONPATH=${pythonPath} python3 -m unittest discover -s tests -t . -v
+                touch $out
+              '';
           formatting = treefmt.config.build.check self;
           lint = pkgs.runCommand "nixkeeper-updates-lint" { nativeBuildInputs = linters; } ''
             cd ${self}
