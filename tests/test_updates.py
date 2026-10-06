@@ -10,7 +10,7 @@ from unittest import mock
 
 from nixkeeper.sources.nixpkgs_update import PARSER
 
-from nixkeeper_updates import cli, digest, site
+from nixkeeper_updates import cli, digest, queue, site
 
 # 2026-10-05 14:20:53 UTC, and a day before.
 NOW = 1791210053
@@ -20,6 +20,47 @@ PR_LOG = (
     "UPDATE_INFO: unciv 4.22.1 -> 4.22.6 https://x\n"
     "https://api.github.com/repos/NixOS/nixpkgs/pulls/123456\n"
 )
+
+
+# The bot's queue page, trimmed (2026-10-06).
+QUEUE_PAGE = """
+    <h1>nixpkgs-update queue</h1>
+<h3>this page is updated every 15 minutes, last updated: 2026-10-06 21:18:38 UTC</h3>
+    <h3>cycle time: 10.3 days</h3>
+<table><thead><tr><th>number</th><th>attribute path</th><th>payload</th></tr></thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td>proxyman</td>
+            <td>3.16.1 3.21.0 https://github.com/ProxymanApp/proxyman-windows-linux/releases</td>
+        </tr>
+        <tr>
+            <td>1</td>
+            <td>proxyman</td>
+            <td>0 1</td>
+        </tr>
+        <tr>
+            <td>1</td>
+            <td>proxyman</td>
+            <td>3.16.1 26.0.1 https://repology.org/project/proxyman/versions</td>
+        </tr>
+        <tr>
+            <td>2</td>
+            <td>ipbt</td>
+            <td>20210215 20260527 https://repology.org/project/ipbt/versions</td>
+        </tr>
+        <tr>
+            <td>24662</td>
+            <td>vym</td>
+            <td>2.9.26 3.0.0 https://github.com/insilmaril/vym/releases</td>
+        </tr>
+        <tr>
+            <td>24662</td>
+            <td>vym</td>
+            <td>2.9.26 3.0.0 https://github.com/insilmaril/vym/releases</td>
+        </tr>
+    </tbody></table>
+"""
 
 
 def state_db(path, rows):
@@ -199,6 +240,72 @@ class ReadAttempt(unittest.TestCase):
             self.assertIsNone(cli.read_attempt("gone", NOW))
 
 
+class Queue(unittest.TestCase):
+    def test_parse(self):
+        found = queue.parse(QUEUE_PAGE)
+        self.assertEqual(
+            {k: found[k] for k in ("updatedAt", "cycleDays", "positions")},
+            {
+                "updatedAt": "2026-10-06T21:18:38+00:00",
+                "cycleDays": 10.3,
+                "positions": 24662,
+            },
+        )
+        self.assertEqual(
+            found["queue"]["proxyman"],
+            {
+                "position": 1,
+                "script": True,  # "0 1"
+                "candidates": [
+                    [
+                        "3.16.1",
+                        "3.21.0",
+                        "https://github.com/ProxymanApp/proxyman-windows-linux/releases",
+                    ],
+                    [
+                        "3.16.1",
+                        "26.0.1",
+                        "https://repology.org/project/proxyman/versions",
+                    ],
+                ],
+            },
+        )
+        # The same source twice: once.
+        self.assertEqual(len(found["queue"]["vym"]["candidates"]), 1)
+        self.assertNotIn("script", found["queue"]["ipbt"])
+
+    def test_odd_payloads(self):
+        # As the page has them: nothing for the version nixpkgs has
+        # (ocamlPackages.labltk), or one with spaces (nerd-fonts.ubuntu-sans).
+        self.assertEqual(
+            queue.candidate_of(
+                ["8.06.16", "https://github.com/garrigue/labltk/releases"]
+            ),
+            ["", "8.06.16", "https://github.com/garrigue/labltk/releases"],
+        )
+        self.assertEqual(
+            queue.candidate_of(
+                [
+                    "3.5.0+1.006",
+                    "/",
+                    "1.100",
+                    "3.5.1",
+                    "https://github.com/ryanoasis/nerd-fonts/releases",
+                ]
+            ),
+            [
+                "3.5.0+1.006 / 1.100",
+                "3.5.1",
+                "https://github.com/ryanoasis/nerd-fonts/releases",
+            ],
+        )
+        self.assertEqual(queue.candidate_of(["1.0", "1.1"]), ["1.0", "1.1", ""])
+        self.assertIsNone(queue.candidate_of(["https://x"]))
+
+    def test_not_the_page(self):
+        self.assertIsNone(queue.parse("<html>Bad gateway</html>"))
+
+
 class Main(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -208,7 +315,7 @@ class Main(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def sync(self, rows, logs, *args):
+    def sync(self, rows, logs, *args, queue_page=QUEUE_PAGE):
         db = os.path.join(self.dir.name, "state.db")
         if os.path.exists(db):
             os.remove(db)
@@ -216,15 +323,21 @@ class Main(unittest.TestCase):
         with open(db, "rb") as f:
             body = f.read()
 
-        def get(url, allowed=site.DEADLINE):
+        def get(url, allowed=site.DEADLINE, compressed=False):
             if url == site.STATE:
                 self.assertEqual(allowed, site.STATE_DEADLINE)  # longer
                 return body
+            if url == site.QUEUE:
+                self.assertTrue(compressed)
+                if isinstance(queue_page, Exception):
+                    raise queue_page
+                return queue_page.encode() if queue_page is not None else None
             text = logs.get(url.rsplit("/", 2)[-2])
             return text.encode() if text is not None else None
 
         with (
             mock.patch.object(cli, "MIN_PACKAGES", 1),
+            mock.patch.object(cli, "MIN_QUEUE", 1),
             mock.patch.object(site, "get", side_effect=get) as fetched,
         ):
             self.assertEqual(cli.main([self.data, *args]), 0)
@@ -241,7 +354,8 @@ class Main(unittest.TestCase):
         (found, meta), fetched = self.sync(rows, logs)
         self.assertEqual(found["wesnoth"]["attempt"]["outcome"], "failed")
         self.assertEqual((meta["read"], meta["pending"]), (1, 0))
-        self.assertEqual(fetched.call_count, 2)  # the state, and wesnoth's log
+        # The state, wesnoth's log and the queue.
+        self.assertEqual(fetched.call_count, 3)
         # Nothing new: the same bytes.
         with open(os.path.join(self.data, digest.ATTEMPTS), "rb") as f:
             before = f.read()
@@ -256,7 +370,28 @@ class Main(unittest.TestCase):
         self.assertEqual(found["gone"], {"noLog": NOW})
         self.assertEqual((meta["missing"], meta["pending"]), (1, 0))
         (_, meta), fetched = self.sync(rows, {})
-        self.assertEqual(fetched.call_count, 1)  # the state only
+        self.assertEqual(fetched.call_count, 2)  # the state and the queue only
+
+    def test_the_queue_and_the_last_one_when_it_cant_be_read(self):
+        rows = [("vym", NOW, NOW + 60, 1)]
+        (_, meta), _ = self.sync(rows, {"vym": FAILED_LOG})
+        self.assertEqual(
+            meta["queue"],
+            {
+                "updatedAt": "2026-10-06T21:18:38+00:00",
+                "cycleDays": 10.3,
+                "positions": 24662,
+                "packages": 3,
+            },
+        )
+        self.assertEqual(
+            digest.read_queue(self.data)["queue"]["vym"]["position"], 24662
+        )
+        for failing in (OSError("down"), "<html>Bad gateway</html>", None):
+            with self.subTest(failing=str(failing)[:20]):
+                (_, again), _ = self.sync(rows, {"vym": FAILED_LOG}, queue_page=failing)
+                self.assertEqual(again["queue"], meta["queue"])  # the last one
+                self.assertEqual(digest.read_queue(self.data)["positions"], 24662)
 
     def test_too_few_packages_writes_nothing(self):
         db = os.path.join(self.dir.name, "state.db")

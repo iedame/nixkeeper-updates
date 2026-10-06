@@ -40,11 +40,32 @@ On the `data` branch:
   `pending` is the day of a newer attempt not read yet (running, or not
   reached yet); `noLog`, the start of a latest attempt that left no log.
 
+- [`data/queue.json.gz`](https://raw.githubusercontent.com/iedame/nixkeeper-updates/data/data/queue.json.gz):
+  the bot's [queue](https://nixpkgs-update-logs.nixos.org/~supervisor/queue.html)
+  as the last run read it: when the page was made (`updatedAt`), how many
+  days the bot takes to go round it (`cycleDays`), how many positions it
+  has, and for each package in it (about 25,000) its position and what it
+  would update it to:
+
+  ```json
+  {"cycleDays": 10.3, "positions": 24662, "updatedAt": "2026-10-06T21:18:38+00:00",
+   "queue": {"unciv": {"position": 10719, "script": true,
+                       "candidates": [["4.22.5", "4.22.7", "https://github.com/yairm210/Unciv/releases"], ...]}}}
+  ```
+
+  A package at position p is tried about p / positions × `cycleDays`
+  after `updatedAt` (the front holds those tried longest ago). Each
+  candidate is `[from, to, source URL]` (`from` can be empty, or hold
+  spaces, as the bot has it); `script` means it also has an updateScript.
+  A package not in the queue has nothing the bot could update it to right
+  now.
+
 - [`data/meta.json`](https://raw.githubusercontent.com/iedame/nixkeeper-updates/data/data/meta.json):
   when the run was (`fetchedAt`), the newest attempt in the bot's state
   (`stateAt`), the rules' version (`parser`), how many packages, attempts
-  read and pending there are, and how many logs and requests the run read
-  and made.
+  read and pending there are, how many logs and requests the run read and
+  made, and the queue's `updatedAt`, `cycleDays`, `positions` and
+  `packages` (`queue`).
 
 The `data` branch is `main` plus one commit with the digest: each run replaces
 it, so no history piles up.
@@ -61,7 +82,9 @@ The "Digest" workflow runs every 3 hours:
    run (pending);
 3. each read with nixkeeper's rules. When those change (nixkeeper's
    `PARSER`, through `nix flake update nixkeeper`), every log is read
-   again, over the following runs.
+   again, over the following runs;
+4. the bot's queue page (about 0.5 MB compressed), one request. When it
+   can't be read, or isn't what it should be, the last one stays.
 
 The first runs read every package's latest log (about 34,000, newest first,
 about 3,000 a run). A run that can't read the state database publishes

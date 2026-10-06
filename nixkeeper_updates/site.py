@@ -9,6 +9,7 @@ and finished, and its exit code (0 when it opened a PR; 1 for everything
 else, a failure as much as "nothing to update", so the log is still read).
 An attempt's log is <attr>/<the UTC day it started>.log."""
 
+import gzip
 import http.client
 import sqlite3
 import time
@@ -19,6 +20,8 @@ from datetime import UTC, datetime
 
 SITE = "https://nixpkgs-update-logs.nixos.org"
 STATE = f"{SITE}/~supervisor/state.db"
+# The bot's queue (about 5 MB of HTML, 0.5 MB compressed), every 15 minutes.
+QUEUE = f"{SITE}/~supervisor/queue.html"
 USER_AGENT = "nixkeeper-updates (+https://github.com/iedame/nixkeeper-updates)"
 # Seconds from one request's start to the next's.
 PAUSE = 1.0
@@ -60,19 +63,25 @@ def _read(resp, deadline):
         chunks.append(chunk)
 
 
-def get(url, allowed=DEADLINE):
+def get(url, allowed=DEADLINE, compressed=False):
     """The body at url (bytes), or None on 404, arriving within allowed
-    seconds. A failed request is retried after RETRY_DELAYS; raises once
-    every try failed."""
+    seconds; compressed: asked for gzipped (a page of text). A failed request
+    is retried after RETRY_DELAYS; raises once every try failed."""
     global requests_made
     for attempt in range(len(RETRY_DELAYS) + 1):
         _wait()
         requests_made += 1
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        headers = {"User-Agent": USER_AGENT}
+        if compressed:
+            headers["Accept-Encoding"] = "gzip"
+        req = urllib.request.Request(url, headers=headers)
         try:
             deadline = time.monotonic() + allowed
             with urllib.request.urlopen(req, timeout=120) as resp:
-                return _read(resp, deadline)
+                body = _read(resp, deadline)
+                if resp.headers.get("Content-Encoding") == "gzip":
+                    body = gzip.decompress(body)
+                return body
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 return None
