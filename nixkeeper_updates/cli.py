@@ -10,7 +10,9 @@ run (every 3 hours):
    MAX_MINUTES), the rest left for the next run ("pending");
 3. reads each with nixkeeper's own rules (nixkeeper.sources.nixpkgs_update:
    parse), so the digest says what nixkeeper would; when those rules change
-   (its PARSER), every log is read again, over the following runs.
+   (its PARSER), every log is read again, over the following runs;
+4. reads the bot's queue (queue.py): when it will try each package next,
+   and what it would update it to. When it can't, the last one stays.
 
 The first runs read every package's latest log (about 34,000, newest first).
 Nothing is written when the state database can't be read: the last digest
@@ -25,9 +27,12 @@ from datetime import UTC, datetime
 
 from nixkeeper.sources.nixpkgs_update import PARSER, parse
 
-from . import digest, site
+from . import digest, queue, site
 
 MAX_READ = 3000
+# Fewer than this many positions in the queue (about 25,000): not the page
+# it should be, and the last one stays.
+MIN_QUEUE = 5_000
 MAX_MINUTES = 150
 # Fewer packages than this in the state database means it wasn't read right
 # (it has about 34,000): nothing is written.
@@ -119,6 +124,38 @@ def entries(found, latest):
     return out
 
 
+def read_queue(directory):
+    """Read the bot's queue into directory's queue.json.gz; what meta.json
+    says of it ({"updatedAt", "cycleDays", "positions", "packages"}), from the
+    last one when it can't be read now (None if there's none)."""
+    try:
+        body = site.get(site.QUEUE, compressed=True)
+    except OSError as e:  # urllib's errors are OSErrors
+        print(
+            f"::warning::The queue couldn't be read ({e}): the last one stays.",
+            file=sys.stderr,
+        )
+        body = None
+    found = queue.parse(body.decode(errors="replace")) if body else None
+    if found and found["positions"] >= MIN_QUEUE:
+        digest.write_queue(directory, found)
+    else:
+        if body:
+            print(
+                "::warning::The queue isn't what it should be: the last one stays.",
+                file=sys.stderr,
+            )
+        found = digest.read_queue(directory)
+    if not found:
+        return None
+    return {
+        "updatedAt": found["updatedAt"],
+        "cycleDays": found["cycleDays"],
+        "positions": found["positions"],
+        "packages": len(found["queue"]),
+    }
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     most = arg(argv, "--max", MAX_READ)
@@ -172,6 +209,9 @@ def main(argv=None):
         found.setdefault(attr, {})["attempt"] = attempt
         read += 1
 
+    print("Reading nixpkgs-update's queue...", file=sys.stderr)
+    queue_meta = read_queue(directory)
+
     out = entries(found, latest)
     newest = max(run["started"] for run in latest.values())
     meta = {
@@ -185,6 +225,8 @@ def main(argv=None):
         "missing": missing,
         "requests": site.requests_made,
     }
+    if queue_meta:
+        meta["queue"] = queue_meta
     digest.write(directory, out, meta)
     print(
         f"  read {read:,} logs ({missing:,} missing), {meta['pending']:,} "

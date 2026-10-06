@@ -17,7 +17,12 @@ there is one, is the day of a newer attempt not read yet (still running, or
 its log not reached yet): a reader can then read that log itself, or take
 the attempt as it is. A package the bot has tried but whose log hasn't been
 read yet has only "pending". "noLog" is the start of a latest attempt that
-left no log (none to read: not pending)."""
+left no log (none to read: not pending).
+
+queue.json.gz is the bot's queue as the last run found it (queue.parse):
+when the page was updated, the cycle time, how many positions, and for
+each package in it its position and what it would update it to. A run that
+couldn't read the queue leaves the last one."""
 
 import gzip
 import json
@@ -25,6 +30,7 @@ import os
 
 FORMAT = 1
 ATTEMPTS = "attempts.jsonl.gz"
+QUEUE = "queue.json.gz"
 META = "meta.json"
 
 
@@ -43,6 +49,24 @@ def write(directory, found, meta):
     with open(os.path.join(directory, META), "w") as f:
         json.dump({"format": FORMAT, **meta}, f, indent=2, sort_keys=True)
         f.write("\n")
+
+
+def write_queue(directory, queue):
+    """Write queue.json.gz (queue.parse's), the same bytes for the same
+    queue."""
+    os.makedirs(directory, exist_ok=True)
+    data = json.dumps(queue, separators=(",", ":"), sort_keys=True).encode()
+    with open(os.path.join(directory, QUEUE), "wb") as f:
+        f.write(gzip.compress(data, compresslevel=9, mtime=0))
+
+
+def read_queue(directory):
+    """queue.json.gz in directory, or None if there's none."""
+    try:
+        with gzip.open(os.path.join(directory, QUEUE), "rt") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
 
 
 def read(directory):
