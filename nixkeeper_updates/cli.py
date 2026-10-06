@@ -129,7 +129,7 @@ def main(argv=None):
 
     print("Reading nixpkgs-update's state...", file=sys.stderr)
     with tempfile.NamedTemporaryFile(suffix=".db") as f:
-        body = site.get(site.STATE)
+        body = site.get(site.STATE, site.STATE_DEADLINE)
         if body is None:
             print("::error::No state database: not written.", file=sys.stderr)
             return 1

@@ -2,7 +2,10 @@ import io
 import os
 import sqlite3
 import tempfile
+import threading
+import time
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from nixkeeper.sources.nixpkgs_update import PARSER
@@ -53,6 +56,57 @@ class Site(unittest.TestCase):
 
 def run(started, finished=True):
     return {"started": started, "finished": started + 60 if finished else None}
+
+
+class Deadline(unittest.TestCase):
+    """A whole answer has its deadline to arrive, however steadily it
+    trickles in: a real server on this machine sending a byte at a time."""
+
+    BODY = b"x" * 60
+
+    def setUp(self):
+        body = self.BODY
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                try:
+                    for i in range(len(body)):
+                        self.wfile.write(body[i : i + 1])
+                        self.wfile.flush()
+                        if self.path == "/slow":
+                            time.sleep(0.02)
+                except OSError:
+                    pass  # the client gave up
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.base = f"http://127.0.0.1:{server.server_address[1]}"
+        for patcher in (
+            mock.patch.object(site, "RETRY_DELAYS", ()),
+            mock.patch.object(site, "PAUSE", 0),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_a_trickle_is_given_up(self):
+        # 60 bytes at 20 ms each: 1.2 s, against 0.3 s.
+        started = time.monotonic()
+        with self.assertRaises(TimeoutError):
+            site.get(self.base + "/slow", 0.3)
+        self.assertLess(time.monotonic() - started, 1)
+
+    def test_a_steady_answer_arrives(self):
+        self.assertEqual(site.get(self.base + "/fast", 0.3), self.BODY)
+        self.assertEqual(site.get(self.base + "/slow", 10), self.BODY)
 
 
 class ToRead(unittest.TestCase):
@@ -162,8 +216,9 @@ class Main(unittest.TestCase):
         with open(db, "rb") as f:
             body = f.read()
 
-        def get(url):
+        def get(url, allowed=site.DEADLINE):
             if url == site.STATE:
+                self.assertEqual(allowed, site.STATE_DEADLINE)  # longer
                 return body
             text = logs.get(url.rsplit("/", 2)[-2])
             return text.encode() if text is not None else None

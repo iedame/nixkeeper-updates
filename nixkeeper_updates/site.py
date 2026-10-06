@@ -9,6 +9,7 @@ and finished, and its exit code (0 when it opened a PR; 1 for everything
 else, a failure as much as "nothing to update", so the log is still read).
 An attempt's log is <attr>/<the UTC day it started>.log."""
 
+import http.client
 import sqlite3
 import time
 import urllib.error
@@ -23,6 +24,14 @@ USER_AGENT = "nixkeeper-updates (+https://github.com/iedame/nixkeeper-updates)"
 PAUSE = 1.0
 # Retries of a failed request, and how long to wait before each.
 RETRY_DELAYS = (10, 60)
+# The longest a whole answer may take to arrive, in seconds: urlopen's
+# timeout only bounds each wait for the next bytes, so a server sending a
+# little at a time could hold the run until its job's time limit, losing
+# every log read so far. Past it, the request has failed (retried, then the
+# log is left for the next run). The state database (about 14 MB) gets
+# longer.
+DEADLINE = 60
+STATE_DEADLINE = 300
 
 requests_made = 0
 _last = 0.0
@@ -36,17 +45,34 @@ def _wait():
     _last = time.monotonic()
 
 
-def get(url):
-    """The body at url (bytes), or None on 404. A failed request is retried
-    after RETRY_DELAYS; raises once every try failed."""
+def _read(resp, deadline):
+    """resp's body, read as it arrives; TimeoutError once time.monotonic()
+    is past deadline, however steadily it trickles in."""
+    if not isinstance(resp, http.client.HTTPResponse):
+        return resp.read()  # not from a socket (a test's): nothing to wait for
+    chunks = []
+    while True:
+        if time.monotonic() > deadline:
+            raise TimeoutError("the answer took too long to arrive")
+        chunk = resp.read1(65536)  # what has arrived, without waiting for more
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+
+
+def get(url, allowed=DEADLINE):
+    """The body at url (bytes), or None on 404, arriving within allowed
+    seconds. A failed request is retried after RETRY_DELAYS; raises once
+    every try failed."""
     global requests_made
     for attempt in range(len(RETRY_DELAYS) + 1):
         _wait()
         requests_made += 1
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         try:
+            deadline = time.monotonic() + allowed
             with urllib.request.urlopen(req, timeout=120) as resp:
-                return resp.read()
+                return _read(resp, deadline)
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 return None
