@@ -28,7 +28,7 @@ On the `data` branch:
   {"attr": "wesnoth",
    "attempt": {"attr": "wesnoth", "date": "2026-10-05", "started": 1791210053,
                "log": "https://nixpkgs-update-logs.nixos.org/wesnoth/2026-10-05.log",
-               "parser": 3, "outcome": "noChange", "from": "1.18.7", "to": "1.18.8"}}
+               "parser": 4, "outcome": "noChange", "from": "1.18.7", "to": "1.18.8"}}
   ```
 
   `attempt` is the latest attempt whose log was read, as nixkeeper reads
