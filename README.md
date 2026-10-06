@@ -28,13 +28,15 @@ On the `data` branch:
   {"attr": "wesnoth",
    "attempt": {"attr": "wesnoth", "date": "2026-10-05", "started": 1791210053,
                "log": "https://nixpkgs-update-logs.nixos.org/wesnoth/2026-10-05.log",
-               "parser": 2, "outcome": "noChange", "from": "1.18.7", "to": "1.18.8"}}
+               "parser": 3, "outcome": "noChange", "from": "1.18.7", "to": "1.18.8"}}
   ```
 
   `attempt` is the latest attempt whose log was read, as nixkeeper reads
-  it: its `outcome` (`prOpened`, `prExists`, `noChange`, `cantUpdate`,
-  `failed`, `other`), the versions, the PR, a few lines of the log when it
-  failed, and the version of the rules it was read with (`parser`).
+  it: its `outcome` (`prOpened`, `prExists`, `branchExists`, `noChange`,
+  `cantUpdate`, `skipped`, `failed`, `other`), the versions, the PR, a few
+  lines of the log saying why when it has them (a failure's end, the bot's
+  reason for skipping), and the version of the rules it was read with
+  (`parser`).
   `pending` is the day of a newer attempt not read yet (running, or not
   reached yet); `noLog`, the start of a latest attempt that left no log.
 

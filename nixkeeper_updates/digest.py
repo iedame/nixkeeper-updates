@@ -8,7 +8,7 @@ attribute path: python3Packages.requests, not python313Packages):
     {"attr": "wesnoth",
      "attempt": {"attr": "wesnoth", "date": "2026-10-05", "started": 1791210053,
                  "log": "https://nixpkgs-update-logs.nixos.org/wesnoth/2026-10-05.log",
-                 "parser": 2, "outcome": "noChange", "from": "1.18.7", ...}}
+                 "parser": 3, "outcome": "noChange", "from": "1.18.7", ...}}
 
 "attempt" is the latest attempt whose log was read: as nixkeeper's own
 reading of a log gives it (nixkeeper.sources.nixpkgs_update: parse, with
