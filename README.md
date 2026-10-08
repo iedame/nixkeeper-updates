@@ -1,6 +1,6 @@
 # nixkeeper-updates
 
-A digest of [nixpkgs-update](https://github.com/nix-community/nixpkgs-update)'s
+A digest of [nixpkgs-update](https://github.com/NixOS/nixpkgs-update)'s
 latest attempt at every package, for
 [nixkeeper](https://github.com/iedame/nixkeeper): whether the bot opened a
 PR, found a PR already open, had nothing to update, couldn't update the
