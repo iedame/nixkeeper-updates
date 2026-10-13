@@ -22,7 +22,7 @@ SITE = "https://nixpkgs-update-logs.nixos.org"
 STATE = f"{SITE}/~supervisor/state.db"
 # The bot's queue (about 5 MB of HTML, 0.5 MB compressed), every 15 minutes.
 QUEUE = f"{SITE}/~supervisor/queue.html"
-USER_AGENT = "nixkeeper-updates (+https://github.com/iedame/nixkeeper-updates)"
+USER_AGENT = "nixkeeper-updates (+https://github.com/nixkeeper/digest-update-bot)"
 # Seconds from one request's start to the next's.
 PAUSE = 1.0
 # Retries of a failed request, and how long to wait before each.

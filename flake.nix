@@ -11,7 +11,7 @@
     # nixkeeper's rules for reading a log (nixkeeper/sources/nixpkgs_update.py),
     # so the digest says what nixkeeper would: one copy of them.
     nixkeeper = {
-      url = "github:iedame/nixkeeper";
+      url = "github:nixkeeper/nixkeeper";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         flake-utils.follows = "flake-utils";

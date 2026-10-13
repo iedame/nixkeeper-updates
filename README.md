@@ -2,7 +2,7 @@
 
 A digest of [nixpkgs-update](https://github.com/NixOS/nixpkgs-update)'s
 latest attempt at every package, for
-[nixkeeper](https://github.com/iedame/nixkeeper): whether the bot opened a
+[nixkeeper](https://github.com/nixkeeper/nixkeeper): whether the bot opened a
 PR, found a PR already open, had nothing to update, couldn't update the
 package, or failed, kept up to date every 3 hours by a workflow, so
 nixkeeper reads one file instead of each package's logs.
@@ -20,7 +20,7 @@ digest says what nixkeeper would.
 
 On the `data` branch:
 
-- [`data/attempts.jsonl.gz`](https://raw.githubusercontent.com/iedame/nixkeeper-updates/data/data/attempts.jsonl.gz):
+- [`data/attempts.jsonl.gz`](https://raw.githubusercontent.com/nixkeeper/digest-update-bot/data/data/attempts.jsonl.gz):
   every package the bot has tried (about 34,000), one per line, sorted by
   its attribute as the bot names it (`python3Packages.requests`):
 
@@ -40,7 +40,7 @@ On the `data` branch:
   `pending` is the day of a newer attempt not read yet (running, or not
   reached yet); `noLog`, the start of a latest attempt that left no log.
 
-- [`data/queue.json.gz`](https://raw.githubusercontent.com/iedame/nixkeeper-updates/data/data/queue.json.gz):
+- [`data/queue.json.gz`](https://raw.githubusercontent.com/nixkeeper/digest-update-bot/data/data/queue.json.gz):
   the bot's [queue](https://nixpkgs-update-logs.nixos.org/~supervisor/queue.html)
   as the last run read it: when the page was made (`updatedAt`), how many
   days the bot takes to go round it (`cycleDays`), how many positions it
@@ -60,7 +60,7 @@ On the `data` branch:
   A package not in the queue has nothing the bot could update it to right
   now.
 
-- [`data/meta.json`](https://raw.githubusercontent.com/iedame/nixkeeper-updates/data/data/meta.json):
+- [`data/meta.json`](https://raw.githubusercontent.com/nixkeeper/digest-update-bot/data/data/meta.json):
   when the run was (`fetchedAt`), the newest attempt in the bot's state
   (`stateAt`), the rules' version (`parser`), how many packages, attempts
   read and pending there are, how many logs and requests the run read and
