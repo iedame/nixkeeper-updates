@@ -99,6 +99,15 @@ nix run . -- data
 brings the digest in `data/` up to date (`-- data --max 100` reads at most
 100 logs). `nix flake check` runs the tests and lint, `nix fmt` formats.
 
+## AI & automation disclosure
+
+This digest's code and documentation are written with the assistance of an
+AI (Claude, by Anthropic), with a person in the loop: nixkeeper's maintainer
+decides what to build, and reviews and tests every change before it's
+merged. The digest itself is automation: a scheduled workflow that reads
+public sources and publishes what it finds. It never comments on, closes or
+merges anything in nixpkgs.
+
 ## License
 
 MIT
